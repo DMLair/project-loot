@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project L.O.O.T. — Logistical Overview of Optimized Transactions</title>
+    <!-- Google Fonts: Cinzel (Display Serif), Plus Jakarta Sans (Clean UI), JetBrains Mono (Dice & Ledgers) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=JetBrains+Mono:wght@500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CDN: Instantly compiles all utility classes and fantasy theme directly in the browser -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              display: ['"Cinzel"', 'Georgia', 'serif'],
+              sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            },
+            colors: {
+              fantasy: {
+                dark: '#07090e',
+                card: '#0f141f',
+                surface: '#151c2c',
+                border: '#222c42',
+                gold: '#f59e0b',
+                goldLight: '#fcd34d',
+                goldHover: '#d97706',
+                brass: '#b45309',
+              }
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-[#07090e] text-slate-100 antialiased selection:bg-amber-500/30 selection:text-amber-200">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,93 @@
+body {
+  background-color: #07090e;
+  background-image: 
+    radial-gradient(circle at 15% 0%, rgba(245, 158, 11, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 85% 10%, rgba(56, 189, 248, 0.05) 0%, transparent 45%),
+    linear-gradient(180deg, #07090e 0%, #0a0e17 100%);
+  color: #f8fafc;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+.font-display {
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.03em;
+}
+
+.bg-fantasy-dark { background-color: #07090e !important; }
+.bg-fantasy-card {
+  background: linear-gradient(155deg, rgba(19, 25, 38, 0.95) 0%, rgba(12, 16, 25, 0.98) 100%) !important;
+  backdrop-filter: blur(12px);
+}
+.border-fantasy-border { border-color: #222c42 !important; }
+.text-fantasy-gold { color: #f59e0b !important; }
+.bg-fantasy-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 55%, #d97706 100%) !important;
+}
+.text-fantasy-dark { color: #07090e !important; }
+
+/* Flagship Gilded Card & Rarity Auras */
+.loot-item-card {
+  position: relative;
+  background: linear-gradient(160deg, rgba(20, 27, 42, 0.95) 0%, rgba(11, 15, 24, 0.98) 100%);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.loot-item-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 32px -6px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(245, 158, 11, 0.22);
+}
+
+.rarity-border-Mundane, .rarity-border-Common {
+  border: 1px solid rgba(51, 65, 85, 0.75);
+}
+.rarity-border-Mundane:hover, .rarity-border-Common:hover {
+  border-color: rgba(148, 163, 184, 0.65);
+}
+.rarity-border-Uncommon {
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  box-shadow: 0 8px 24px -6px rgba(16, 185, 129, 0.12), inset 0 1px 0 0 rgba(16, 185, 129, 0.15);
+}
+.rarity-border-Uncommon:hover {
+  border-color: rgba(52, 211, 153, 0.85);
+}
+.rarity-border-Rare {
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  box-shadow: 0 8px 24px -6px rgba(56, 189, 248, 0.16), inset 0 1px 0 0 rgba(56, 189, 248, 0.2);
+}
+.rarity-border-Rare:hover {
+  border-color: rgba(125, 211, 252, 0.9);
+}
+.rarity-border-VeryRare {
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  box-shadow: 0 8px 26px -6px rgba(168, 85, 247, 0.22), inset 0 1px 0 0 rgba(192, 132, 252, 0.25);
+}
+.rarity-border-VeryRare:hover {
+  border-color: rgba(216, 180, 254, 0.95);
+}
+.rarity-border-Legendary {
+  border: 1px solid rgba(245, 158, 11, 0.7);
+  box-shadow: 0 10px 30px -5px rgba(245, 158, 11, 0.28), inset 0 1px 0 0 rgba(252, 211, 77, 0.35);
+}
+.rarity-border-Legendary:hover {
+  border-color: rgba(252, 211, 77, 1);
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #07090e;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+  border: 1px solid #334155;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

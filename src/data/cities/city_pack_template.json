@@ -1,0 +1,183 @@
+{
+  "_template_instructions": {
+    "howToUse": "Copy this file to create a new city pack (e.g. baldurs_gate_city_pack.json). Load it directly in Project L.O.O.T. via the DM Header [Upload City Pack] button or drop it into src/data/cities/.",
+    "tierGuide": {
+      "1": "Destitute / Slums (0.6x prices, 15% Flaw chance, 0% Boon)",
+      "2": "Working Harbor / Rough (0.8x prices, 10% Flaw chance, 0% Boon)",
+      "3": "Guild Standard / Trade Quarter (1.0x prices, 0% Flaw, 0% Boon)",
+      "4": "Upper Civic / Affluent (1.2x prices, 0% Flaw, 10% Boon chance)",
+      "5": "Aristocratic / High Luxury (1.6x prices, 0% Flaw, 20% Boon chance)",
+      "BM": "Black Market / Underworld (1.1x prices, 10% Flaw, 10% Boon)"
+    },
+    "vendorArchetypes": [
+      "Smithy / Weaponsmith",
+      "Armorer / Shieldwright",
+      "Apothecary / Alchemist",
+      "Arcane Curios & Scrolls",
+      "General Outfitter & Gear",
+      "Jeweler / Gemcutter",
+      "Tailor / Fine Haberdashery",
+      "Bowyer / Fletcher / Leatherworker",
+      "Locksmith / Tinker / Precision Crafts",
+      "Scribe / Cartographer / Bookbinder",
+      "Stablemaster / Mounts & Vehicles",
+      "Shady Fence / Black Market"
+    ]
+  },
+  "packType": "PROJECT_LOOT_CITY_PACK",
+  "schemaVersion": "2.0.0",
+  "id": "Neverwinter",
+  "name": "Neverwinter",
+  "subtitle": "The Jewel of the North",
+  "planet": "Toril",
+  "continent": "Faerûn",
+  "region": "Sword Coast",
+  "banner": "/banners/neverwinter.jpg",
+  "desc": "City of Skilled Hands. Rebuilt along the warm, ice-free waters of the Neverwinter River under Lord Dagult Neverember.",
+  "wards": [
+    {
+      "id": "Enclave",
+      "name": "Protector's Enclave",
+      "tier": "4",
+      "desc": "Heart of governance, the Hall of Justice, bustling markets, and grand guild academies."
+    },
+    {
+      "id": "Blacklake",
+      "name": "Blacklake District",
+      "tier": "5",
+      "desc": "Walled noble estates, manicured gardens, high-end jewelers, and old aristocratic bloodlines."
+    },
+    {
+      "id": "River",
+      "name": "River District",
+      "tier": "3",
+      "desc": "Master clockmakers, glassblowers, bridges, and busy artisan workshops lining the warm river."
+    },
+    {
+      "id": "Docks",
+      "name": "Neverwinter Docks",
+      "tier": "2",
+      "desc": "Deepwater piers, Mintarn mercenary barracks, shipwrights, and weathered sea-traders."
+    },
+    {
+      "id": "BeggarNest",
+      "name": "Beggar's Nest & Chasm Rim",
+      "tier": "1",
+      "desc": "Scarred ruins near the sealed Chasm, salvaged dungeon gear, and desperate street stalls."
+    },
+    {
+      "id": "Undercliffs",
+      "name": "Skull Crag & Smuggler Caves",
+      "tier": "BM",
+      "desc": "Hidden sea-caves beneath the cliffs where pirates and Zhentarim agents trade contraband."
+    }
+  ],
+  "shops": [
+    {
+      "Shop Name": "The Shining Knight Arms & Armor",
+      "Ward": "Enclave",
+      "Socioeconomic Tier": "4",
+      "Primary Vendor Type": "Armorer / Shieldwright",
+      "Proprietor / Staff": " Danneth Waylen - Veteran dwarf armorer with a braided silver beard",
+      "Vibe & Decor": "Polished half-plate stands beneath banners of Tyr; the ring of dwarven hammers echoes from the rear forge."
+    },
+    {
+      "Shop Name": "Blades of the Dolphin Bridge",
+      "Ward": "River",
+      "Socioeconomic Tier": "3",
+      "Primary Vendor Type": "Smithy / Weaponsmith",
+      "Proprietor / Staff": "Serissa Vance - Sharp-eyed human swordsmith with heat-scarred forearms",
+      "Vibe & Decor": "Water-powered grindstones spin beside racks of river-quenched steel longswords, rapiers, and crossbows."
+    },
+    {
+      "Shop Name": "The Starlight Mantle Arcanum",
+      "Ward": "Enclave",
+      "Socioeconomic Tier": "4",
+      "Primary Vendor Type": "Arcane Curios & Scrolls",
+      "Proprietor / Staff": "Magister Elindra Moonflower - Sun elf illusionist in star-embroidered robes",
+      "Vibe & Decor": "Floating driftglobes illuminate cedar shelves packed with spell scrolls, component pouches, and wands."
+    },
+    {
+      "Shop Name": "Many-Starred Apothecary",
+      "Ward": "River",
+      "Socioeconomic Tier": "3",
+      "Primary Vendor Type": "Apothecary / Alchemist",
+      "Proprietor / Staff": "Barnaby Copperkettle - Cheerful rock gnome herbalist wearing magnifying goggles",
+      "Vibe & Decor": "Warm glass alembics bubble with crimson healing draughts, antitoxins, and Neverwinter botanical tinctures."
+    },
+    {
+      "Shop Name": "High Road Caravan Outfitters",
+      "Ward": "Docks",
+      "Socioeconomic Tier": "2",
+      "Primary Vendor Type": "General Outfitter & Gear",
+      "Proprietor / Staff": "Garrick \"Two-Mules\" Thorne - Grizzled caravan master chewing pipeweed",
+      "Vibe & Decor": "Coils of hemp rope, waxed canvas tents, lanterns, rations, and iron pitons stacked to the rafters."
+    },
+    {
+      "Shop Name": "Blacklake Crown Lapidary",
+      "Ward": "Blacklake",
+      "Socioeconomic Tier": "5",
+      "Primary Vendor Type": "Jeweler / Gemcutter",
+      "Proprietor / Staff": "Lady Vespera Marcello - Poised Tethyrian gemologist with a crystal loupe",
+      "Vibe & Decor": "Velvet display cases guarded by arcane wards showcase cut sapphires, platinum filigree rings, and noble regalia."
+    },
+    {
+      "Shop Name": "Neverwinter Clockwork & Lock",
+      "Ward": "River",
+      "Socioeconomic Tier": "3",
+      "Primary Vendor Type": "Locksmith / Tinker / Precision Crafts",
+      "Proprietor / Staff": "Tock Brassfinger - Lantanese tinker with brass prosthetics",
+      "Vibe & Decor": "Ticking wall clocks, precision tumblers, thieves' tools, spyglasses, and delicate brass mechanisms."
+    },
+    {
+      "Shop Name": "Chasm-Rim Salvage & Scrap",
+      "Ward": "BeggarNest",
+      "Socioeconomic Tier": "1",
+      "Primary Vendor Type": "Smithy / Weaponsmith",
+      "Proprietor / Staff": "Grimjaw - Half-orc scavenger sorting dented shields and dungeon pulls",
+      "Vibe & Decor": "Tarpaulins stretched over timber beams; barrels of notched axes, scavenged daggers, and cheap iron."
+    },
+    {
+      "Shop Name": "The Whispering Grotto Fence",
+      "Ward": "Undercliffs",
+      "Socioeconomic Tier": "BM",
+      "Primary Vendor Type": "Shady Fence / Black Market",
+      "Proprietor / Staff": "Nyx \"The Tide\" - Tiefling smuggler draped in sea-wolf furs",
+      "Vibe & Decor": "Lantern-lit sea cave smelling of brine and drow poison; crates of untaxed luxuries and illicit blades."
+    }
+  ],
+  "eateries": [
+    {
+      "Eatery Name": "The Moonstone Mask",
+      "Ward": "Enclave",
+      "Socioeconomic Tier": "5",
+      "Eatery Type": "Luxury Floating Inn & Salon",
+      "Proprietor / Staff": "Ophala Cheldarstorn - Mysterious, gracious hostess with masked servers",
+      "Vibe & Decor": "Floating earthmote tethered by massive iron chains; silk divans, harp music, and exquisite vintages."
+    },
+    {
+      "Eatery Name": "The Driftwood Tavern",
+      "Ward": "River",
+      "Socioeconomic Tier": "3",
+      "Eatery Type": "Adventurer Tavern & Taproom",
+      "Proprietor / Staff": "Madam Rosene - No-nonsense retired sea captain",
+      "Vibe & Decor": "Built from the ribs of wrecked galleons; roaring hearth, roast river-trout, and frothy amber ale."
+    },
+    {
+      "Eatery Name": "The Beached Leviathan",
+      "Ward": "Docks",
+      "Socioeconomic Tier": "2",
+      "Eatery Type": "Harbor Ship-Tavern",
+      "Proprietor / Staff": "Harrag - Boisterous pirate turned barkeep",
+      "Vibe & Decor": "An entire caravel wedged permanently into the pier; hammocks, spiced rum, and salt-pork stew."
+    },
+    {
+      "Eatery Name": "The Fallen Tower",
+      "Ward": "BeggarNest",
+      "Socioeconomic Tier": "1",
+      "Eatery Type": "Raucous Ruin-Side Alehouse",
+      "Proprietor / Staff": "Brakka - Stout shield dwarf with an iron ladle",
+      "Vibe & Decor": "Cracked wizard tower converted into a gritty taproom; cheap bitter stout and hot mutton pies."
+    }
+  ]
+}
