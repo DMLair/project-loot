@@ -573,6 +573,15 @@ export default function App() {
     resolvePendingCheck,
     sessionCode,
     sessionRole,
+    isPlayerLocked,
+    playerHasJoinedLobby,
+    roomConnectionStatus,
+    roomStatusMessage,
+    connectedPeersCount,
+    hostLiveRoom,
+    joinLiveRoom,
+    openPlayerJoinLobby,
+    leaveLiveRoom,
     syncRelayUrl,
     setSessionConfig,
     pushRoomStateNow,
@@ -644,6 +653,9 @@ export default function App() {
   const [cityPackModalOpen, setCityPackModalOpen] = useState(false);
   const [roomCodeInput, setRoomCodeInput] = useState(sessionCode || 'LOOT');
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [playerJoinCodeInput, setPlayerJoinCodeInput] = useState(sessionCode || '');
+  const [playerJoinNameInput, setPlayerJoinNameInput] = useState('');
+  const [copyLinkFeedback, setCopyLinkFeedback] = useState(false);
   const [heistPhysicalD20, setHeistPhysicalD20] = useState('');
   const [heistSkillChoice, setHeistSkillChoice] = useState('Perception (Wisdom)');
   const [appraisalSkillChoice, setAppraisalSkillChoice] = useState('Investigation (Int)');
@@ -720,23 +732,39 @@ export default function App() {
   const [itemCondition, setItemCondition] = useState('standard');
   const [soldHistory, setSoldHistory] = useState([]);
 
-  // Auto-connect if URL has ?room=CODE&role=player
+  // Dungeon Spoils Loot Generator state (Exact Level 1-20 & Party Size 1-8)
+  const [lootPartyLevel, setLootPartyLevel] = useState(3);
+  const [lootPartySize, setLootPartySize] = useState(4);
+  const [lootScenarioGroup, setLootScenarioGroup] = useState('All');
+  const [lootSource, setLootSource] = useState('LockedStrongbox');
+  const [lootPhysicalD100, setLootPhysicalD100] = useState('');
+  const [generatedLoot, setGeneratedLoot] = useState(null);
+
+  // Auto-detect ?room=CODE Join Link and launch Kahoot/Jackbox Player Join Lobby Gate
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const urlRoom = params.get('room');
     const urlRole = params.get('role');
     if (urlRoom) {
-      setRoomCodeInput(urlRoom.toUpperCase());
-      setSessionConfig({
-        sessionCode: urlRoom.toUpperCase(),
-        sessionRole: urlRole === 'host' ? 'host' : 'player'
-      });
-      if (urlRole === 'player') {
+      const cleanCode = urlRoom.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      setRoomCodeInput(cleanCode);
+      setPlayerJoinCodeInput(cleanCode);
+      if (urlRole === 'host') {
+        setSessionConfig({ sessionCode: cleanCode, sessionRole: 'host' });
+      } else {
         setDmMode(false);
+        openPlayerJoinLobby(cleanCode);
       }
     }
   }, []);
+
+  // Keep dmMode strictly false whenever locked in Player Mode
+  useEffect(() => {
+    if (isPlayerLocked && dmMode) {
+      setDmMode(false);
+    }
+  }, [isPlayerLocked, dmMode]);
 
 
   // Clean up legacy 5-character test roster if still cached in browser localStorage
@@ -1148,13 +1176,7 @@ export default function App() {
     }
   ];
 
-  // Dungeon Spoils Loot Generator state (Exact Level 1-20 & Party Size 1-8)
-  const [lootPartyLevel, setLootPartyLevel] = useState(3);
-  const [lootPartySize, setLootPartySize] = useState(4);
-  const [lootScenarioGroup, setLootScenarioGroup] = useState('All');
-  const [lootSource, setLootSource] = useState('LockedStrongbox');
-  const [lootPhysicalD100, setLootPhysicalD100] = useState('');
-  const [generatedLoot, setGeneratedLoot] = useState(null);
+
 
 
   // Top-level isFood definition accessible in all sub-views and modals
@@ -1576,6 +1598,112 @@ export default function App() {
     );
   }
 
+  // FULL-SCREEN KAHOOT / JACKBOX PLAYER JOIN LOBBY GATE
+  if (isPlayerLocked && !playerHasJoinedLobby) {
+    return (
+      <div className="min-h-screen bg-[#070a12] text-slate-100 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden">
+        {/* Ambient radial glow */}
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/20 via-slate-950 to-[#070a12]" />
+
+        <div className="relative z-10 w-full max-w-md bg-[#101522] border-2 border-amber-500/50 rounded-3xl p-7 shadow-2xl shadow-amber-500/10 space-y-6 text-center">
+          {/* Crest & Branding */}
+          <div className="flex flex-col items-center space-y-2">
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 p-[2px] shadow-xl shadow-amber-500/25">
+              <div className="h-full w-full bg-[#090d16] rounded-[14px] flex items-center justify-center">
+                <svg className="w-9 h-9 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="12 2 21 7 21 17 12 22 3 17 3 7 12 2" />
+                  <polygon points="12 6 17.5 15 6.5 15 12 6" />
+                  <line x1="12" y1="2" x2="12" y2="6" />
+                  <line x1="21" y1="7" x2="17.5" y2="15" />
+                  <line x1="3" y1="7" x2="6.5" y2="15" />
+                  <line x1="12" y1="22" x2="6.5" y2="15" />
+                  <line x1="12" y1="22" x2="17.5" y2="15" />
+                </svg>
+              </div>
+            </div>
+            <span className="px-3 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-300">
+              Project L.O.O.T. • Live Table Session
+            </span>
+            <h1 className="text-2xl font-display font-black tracking-wide text-white">
+              Join Your DM&apos;s World
+            </h1>
+            <p className="text-xs text-slate-400 max-w-xs">
+              Enter your table&apos;s Room Code and your Character Name to shop, barter, and roll live with your party.
+            </p>
+          </div>
+
+          {/* Join Form */}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const cleanCode = (playerJoinCodeInput || sessionCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+              const cleanName = (playerJoinNameInput || '').trim();
+              if (!cleanCode || !cleanName) return;
+              await joinLiveRoom(cleanCode, cleanName);
+              confetti({ particleCount: 55, spread: 60, origin: { y: 0.7 } });
+            }}
+            className="space-y-4 text-left"
+          >
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-sky-400 mb-1.5">
+                1. Table Room Code
+              </label>
+              <input
+                type="text"
+                maxLength={8}
+                required
+                value={playerJoinCodeInput}
+                onChange={(e) => setPlayerJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                placeholder="E.G. K8X2P"
+                className="w-full bg-slate-950 border-2 border-slate-700 focus:border-sky-400 rounded-xl px-4 py-3 text-center font-mono text-2xl font-black tracking-[0.25em] text-fantasy-gold uppercase focus:outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-amber-400 mb-1.5">
+                2. Your Character Name (&amp; Class)
+              </label>
+              <input
+                type="text"
+                maxLength={32}
+                required
+                autoFocus
+                value={playerJoinNameInput}
+                onChange={(e) => setPlayerJoinNameInput(e.target.value)}
+                placeholder="e.g. Vax (Rogue) or Shadowheart"
+                className="w-full bg-slate-950 border-2 border-slate-700 focus:border-fantasy-gold rounded-xl px-4 py-3 text-base font-bold text-white placeholder-slate-600 focus:outline-none transition"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!playerJoinCodeInput.trim() || !playerJoinNameInput.trim()}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20 transition transform active:scale-[0.99]"
+            >
+              ⚡ Enter Live Session
+            </button>
+          </form>
+
+          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Zero-Spoiler Player View</span>
+            <button
+              type="button"
+              onClick={() => {
+                leaveLiveRoom();
+                if (typeof window !== 'undefined' && window.location.search) {
+                  window.history.replaceState({}, '', window.location.pathname);
+                }
+              }}
+              className="text-slate-400 hover:text-amber-300 underline transition"
+            >
+              Are you the DM? Open Host Screen
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-fantasy-dark text-slate-200 flex flex-col font-sans">
       {/* Top 2-Tier Command Deck Header */}
@@ -1587,16 +1715,9 @@ export default function App() {
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => {
               setAppMode('kiosk');
-              if (selectedSettlement) {
-                selectWard(null);
-              } else {
-                setPlanet('Toril');
-                setContinent('Faerûn');
-                setRegion('Sword Coast');
-                setSettlement('Waterdeep');
-              }
+              resetToCosmos();
             }}
-            title="Click to return to active City Directory"
+            title="Click to return to Cosmic Atlas Home"
           >
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 p-[1.5px] shadow-lg shadow-amber-500/20 group-hover:scale-105 transition">
               <div className="h-full w-full bg-[#090d16] rounded-[10px] flex items-center justify-center relative overflow-hidden">
@@ -1667,11 +1788,20 @@ export default function App() {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setRoomModalOpen(true)}
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-sky-700/60 bg-sky-950/50 hover:bg-sky-900/60 text-sky-300 text-xs font-bold transition shadow"
-              title="Open Live Session Room Code & Player Roster Sync"
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition shadow ${
+                roomConnectionStatus === 'hosting' || roomConnectionStatus === 'connected'
+                  ? 'border-emerald-500/70 bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300'
+                  : 'border-sky-700/60 bg-sky-950/50 hover:bg-sky-900/60 text-sky-300'
+              }`}
+              title="Open Live Session Room Code, QR Share Link & Player Roster"
             >
-              <span>📡</span>
+              <span>{roomConnectionStatus === 'hosting' || roomConnectionStatus === 'connected' ? '🟢' : '📡'}</span>
               <span className="font-mono tracking-wider">{sessionCode}</span>
+              {roomConnectionStatus === 'hosting' && (
+                <span className="hidden sm:inline text-[10px] bg-emerald-500/20 px-1.5 py-0.2 rounded text-emerald-200 font-black">
+                  LIVE ({Math.max(0, partyMembers.filter(p => p !== 'DM').length)})
+                </span>
+              )}
               {pendingChecks.length > 0 && dmMode && (
                 <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">
                   {pendingChecks.length}
@@ -1679,18 +1809,20 @@ export default function App() {
               )}
             </button>
 
-            <button
-              onClick={() => setDmMode(!dmMode)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${
-                dmMode
-                  ? 'bg-amber-950/90 border-amber-500 text-amber-300 shadow-sm shadow-amber-500/20'
-                  : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600'
-              }`}
-              title={dmMode ? "DM View Active: Revealing DCs, proprietor psychology, hidden tiles & Master Catalog" : "Player View: Zero-spoiler anti-metagame mode"}
-            >
-              <Eye className="w-3.5 h-3.5 text-amber-400" />
-              <span>{dmMode ? 'DM View' : 'Player View'}</span>
-            </button>
+            {!isPlayerLocked && (
+              <button
+                onClick={() => setDmMode(!dmMode)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${
+                  dmMode
+                    ? 'bg-amber-950/90 border-amber-500 text-amber-300 shadow-sm shadow-amber-500/20'
+                    : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600'
+                }`}
+                title={dmMode ? "DM View Active: Revealing DCs, proprietor psychology, hidden tiles & Master Catalog" : "Player View Preview: Zero-spoiler anti-metagame mode"}
+              >
+                <Eye className="w-3.5 h-3.5 text-amber-400" />
+                <span>{dmMode ? 'DM View' : 'Player View'}</span>
+              </button>
+            )}
 
             <button
               onClick={() => setCartOpen(true)}
@@ -1796,47 +1928,63 @@ export default function App() {
 
             {/* Right: Always-Visible Day Stock Tracker + Active Shopper (Starts on DM) + DM Tools */}
             <div className="flex items-center flex-wrap gap-2">
-              {/* Restored Always-Visible Day Stock Tracker & Reroll Button */}
+              {/* Restored Always-Visible Day Stock Tracker & Reroll Button (Reroll hidden for locked remote players) */}
               <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg overflow-hidden">
                 <span className="px-2.5 py-1 text-[11px] font-mono font-bold text-amber-300 bg-slate-950 border-r border-slate-800">
                   📅 Day {daySeed} Stock
                 </span>
-                <button
-                  onClick={() => {
-                    rerollStock();
-                    addActivityLog({ player: activePlayer || 'DM', action: 'Day Restock', details: `Advanced to Day ${daySeed + 1} (Fresh merchant inventory)` });
-                  }}
-                  className="flex items-center space-x-1 px-2.5 py-1 hover:bg-slate-800 text-[11px] font-bold text-slate-200 hover:text-fantasy-gold transition"
-                  title="Advance campaign day & reroll fresh shop stock across the city"
-                >
-                  <Dices className="w-3.5 h-3.5 text-fantasy-gold" />
-                  <span>Reroll Day</span>
-                </button>
+                {!isPlayerLocked && (
+                  <button
+                    onClick={() => {
+                      rerollStock();
+                      addActivityLog({ player: activePlayer || 'DM', action: 'Day Restock', details: `Advanced to Day ${daySeed + 1} (Fresh merchant inventory)` });
+                    }}
+                    className="flex items-center space-x-1 px-2.5 py-1 hover:bg-slate-800 text-[11px] font-bold text-slate-200 hover:text-fantasy-gold transition"
+                    title="Advance campaign day & reroll fresh shop stock across the city"
+                  >
+                    <Dices className="w-3.5 h-3.5 text-fantasy-gold" />
+                    <span>Reroll Day</span>
+                  </button>
+                )}
               </div>
 
-              {/* Active Shopper Selector (Defaults to DM; dynamically populates as players join) */}
-              <div className="flex items-center space-x-1.5 bg-slate-900 border border-slate-700/80 px-2.5 py-1 rounded-lg" title="Active Shopper (Defaults to DM until players join via Room Code)">
-                <span className="text-slate-400 text-[10px] uppercase tracking-wider font-bold">Shopper:</span>
-                <select
-                  value={activePlayer}
-                  onChange={(e) => {
-                    setActivePlayer(e.target.value);
-                    addActivityLog({ player: e.target.value, action: 'Selected Shopper', details: 'Switched active shopper' });
-                  }}
-                  className="bg-transparent text-amber-300 font-bold text-xs focus:outline-none cursor-pointer"
-                >
-                  {partyMembers.map(p => (
-                    <option key={p} value={p} className="bg-slate-900 text-white font-medium">{p}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => setRoomModalOpen(true)}
-                  className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-bold border border-slate-700 transition"
-                  title="Add or manage joined players"
-                >
-                  + Join
-                </button>
-              </div>
+              {/* Active Shopper Selector (Locked to character name when in Player Mode; dropdown for DM) */}
+              {isPlayerLocked ? (
+                <div className="flex items-center space-x-2 bg-emerald-950/50 border border-emerald-600/60 px-3 py-1 rounded-lg">
+                  <span className="text-[10px] uppercase tracking-wider font-black text-emerald-400">Playing As:</span>
+                  <span className="text-xs font-black text-white">{activePlayer}</span>
+                  <button
+                    onClick={() => openPlayerJoinLobby(sessionCode)}
+                    className="text-[10px] text-slate-400 hover:text-white underline ml-1"
+                    title="Change character name or room code"
+                  >
+                    Edit
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-1.5 bg-slate-900 border border-slate-700/80 px-2.5 py-1 rounded-lg" title="Active Shopper (Defaults to DM until players join via Room Code)">
+                  <span className="text-slate-400 text-[10px] uppercase tracking-wider font-bold">Shopper:</span>
+                  <select
+                    value={activePlayer}
+                    onChange={(e) => {
+                      setActivePlayer(e.target.value);
+                      addActivityLog({ player: e.target.value, action: 'Selected Shopper', details: 'Switched active shopper' });
+                    }}
+                    className="bg-transparent text-amber-300 font-bold text-xs focus:outline-none cursor-pointer"
+                  >
+                    {partyMembers.map(p => (
+                      <option key={p} value={p} className="bg-slate-900 text-white font-medium">{p}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setRoomModalOpen(true)}
+                    className="text-[10px] px-1.5 py-0.2 rounded bg-sky-950 hover:bg-sky-900 text-sky-300 font-bold border border-sky-700/60 transition"
+                    title="Host a live room or invite players"
+                  >
+                    📡 Host / Invite
+                  </button>
+                </div>
+              )}
 
               {/* DM Command Group */}
               {dmMode && (
@@ -6937,16 +7085,20 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 7: Kahoot / Jackbox Live Session Room & Vercel Connect Modal */}
+      {/* MODAL 7: Kahoot / Jackbox Live Session Room & Cross-Device Host Dashboard */}
       {roomModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-fantasy-card border-2 border-sky-700/60 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4">
+          <div className="bg-fantasy-card border-2 border-sky-600/70 rounded-2xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-fantasy-border">
-              <div className="flex items-center space-x-2">
-                <span className="text-xl">📡</span>
+              <div className="flex items-center space-x-2.5">
+                <span className="text-2xl">{roomConnectionStatus === 'hosting' || roomConnectionStatus === 'connected' ? '🟢' : '📡'}</span>
                 <div>
-                  <h3 className="font-black text-lg text-white">Project L.O.O.T. Live Table Room</h3>
-                  <p className="text-[11px] text-slate-400">Jackbox / Kahoot-style player connect & roll adjudication</p>
+                  <h3 className="font-black text-lg text-white">
+                    {isPlayerLocked ? 'Live Player Session Connection' : 'DM Live Session Host & Player Invite'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {roomStatusMessage}
+                  </p>
                 </div>
               </div>
               <button onClick={() => setRoomModalOpen(false)} className="text-slate-400 hover:text-white">
@@ -6954,159 +7106,252 @@ export default function App() {
               </button>
             </div>
 
-            {/* Room Code Display & Join Input */}
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400 block">Active Table Room Code</span>
-                  <span className="text-3xl font-black font-mono tracking-widest text-fantasy-gold">{sessionCode}</span>
+            {isPlayerLocked ? (
+              /* PLAYER VIEW OF ROOM MODAL */
+              <div className="space-y-4">
+                <div className="bg-slate-900 border border-emerald-600/50 p-4 rounded-xl text-center space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
+                    Connected to DM Room
+                  </span>
+                  <div className="text-3xl font-black font-mono tracking-widest text-fantasy-gold">
+                    {sessionCode}
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    Playing as <strong className="text-white">{activePlayer}</strong>
+                  </p>
                 </div>
-                <div className="flex flex-col gap-1.5">
+
+                <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-                      let code = '';
-                      for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
-                      setRoomCodeInput(code);
-                      setSessionConfig({ sessionCode: code, sessionRole: 'host' });
+                      setRoomModalOpen(false);
+                      openPlayerJoinLobby(sessionCode);
                     }}
-                    className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700 transition"
                   >
-                    🎲 New 4-Char Code
+                    Switch Character / Room Code
                   </button>
                   <button
                     onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        const shareUrl = `${window.location.origin}${window.location.pathname}?room=${sessionCode}&role=player`;
-                        navigator.clipboard?.writeText(shareUrl);
-                        alert(`Player Join Link copied to clipboard:\n${shareUrl}`);
-                      }
+                      leaveLiveRoom();
+                      setRoomModalOpen(false);
                     }}
-                    className="px-3 py-1 rounded bg-sky-950 hover:bg-sky-900 text-xs font-bold text-sky-300 border border-sky-700 transition"
+                    className="py-2.5 px-4 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-xs font-bold text-rose-200 border border-rose-700/60 transition"
                   >
-                    🔗 Copy Player Join URL
+                    Leave Room (Return to DM Mode)
                   </button>
                 </div>
               </div>
-
-              <div className="flex items-center space-x-2 pt-2 border-t border-slate-800">
-                <input
-                  type="text"
-                  maxLength={8}
-                  value={roomCodeInput}
-                  onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                  placeholder="Enter Room Code"
-                  className="w-32 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-white uppercase"
-                />
-                <button
-                  onClick={() => {
-                    setSessionConfig({ sessionCode: roomCodeInput, sessionRole });
-                    pushRoomStateNow();
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-fantasy-gold text-fantasy-dark font-black text-xs hover:bg-fantasy-goldHover transition"
-                >
-                  Connect to Room
-                </button>
-              </div>
-            </div>
-
-            {/* DM Roll Resolution Mode Toggle: Trusted Mode vs DM Approval Mode */}
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
-                Player Dice Roll Resolution Mode
-              </span>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  onClick={() => setRollResolutionMode('trusted')}
-                  className={`p-3 rounded-xl border text-left transition ${
-                    rollResolutionMode === 'trusted'
-                      ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 shadow'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span className="font-black block text-xs mb-0.5">⚡ Trusted Mode (Auto)</span>
-                  <span className="text-[10px] opacity-80 block leading-tight">
-                    Player rolls resolve immediately (DCs & prompts stay hidden).
-                  </span>
-                </button>
-                <button
-                  onClick={() => setRollResolutionMode('approval')}
-                  className={`p-3 rounded-xl border text-left transition ${
-                    rollResolutionMode === 'approval'
-                      ? 'bg-amber-950/50 border-fantasy-gold text-amber-200 shadow'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span className="font-black block text-xs mb-0.5">🛡️ DM Approval Mode</span>
-                  <span className="text-[10px] opacity-80 block leading-tight">
-                    Player rolls go to DM Pending Queue for manual Pass/Fail approval.
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {/* Party Roster & Live Player Locations */}
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Connected Party Roster & Live Locations
-                </span>
-                {partyMembers.length > 1 && resetPartyRoster && (
-                  <button
-                    onClick={() => resetPartyRoster()}
-                    className="text-[10px] text-rose-400 hover:text-rose-300 font-bold underline"
-                    title="Clear joined players and reset Shopper to DM only"
-                  >
-                    Reset to DM Only
-                  </button>
-                )}
-              </div>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                {partyMembers.map((member) => (
-                  <div key={member} className="flex items-center justify-between bg-slate-950 px-3 py-2 rounded-lg border border-slate-800">
-                    <button
-                      onClick={() => setActivePlayer(member)}
-                      className={`font-bold text-left ${member === activePlayer ? 'text-fantasy-gold' : 'text-white hover:text-amber-200'}`}
-                    >
-                      {member} {member === activePlayer && '(Active)'}
-                    </button>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[11px] text-sky-300 font-medium truncate max-w-[170px]">
-                        📍 {playerLocations?.[member] || `${selectedSettlement || 'Waterdeep'}`}
+            ) : (
+              /* DM HOST VIEW OF ROOM MODAL */
+              <>
+                {/* Step 1: Create / Host Live Room & Share Link + QR Code */}
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-sky-400 block">
+                        Step 1 • Table Room Code
                       </span>
-                      {partyMembers.length > 1 && removePartyMember && (
+                      <div className="flex items-center space-x-3 mt-0.5">
+                        <span className="text-4xl font-black font-mono tracking-[0.2em] text-fantasy-gold">
+                          {sessionCode}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          roomConnectionStatus === 'hosting'
+                            ? 'bg-emerald-500/20 border border-emerald-500/60 text-emerald-300'
+                            : 'bg-slate-800 border border-slate-700 text-slate-400'
+                        }`}>
+                          {roomConnectionStatus === 'hosting' ? '🟢 Live On Air' : '⚪ Standby'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {roomConnectionStatus !== 'hosting' ? (
                         <button
-                          onClick={() => removePartyMember(member)}
-                          className="text-slate-500 hover:text-rose-400 transition"
-                          title={`Remove ${member} from roster`}
+                          onClick={async () => {
+                            const code = await hostLiveRoom(sessionCode);
+                            setRoomCodeInput(code);
+                          }}
+                          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          🚀 Start Live Room
+                        </button>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                            let newCode = '';
+                            for (let i = 0; i < 5; i++) newCode += chars[Math.floor(Math.random() * chars.length)];
+                            setRoomCodeInput(newCode);
+                            await hostLiveRoom(newCode);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-amber-300 border border-amber-600/40 transition"
+                        >
+                          🎲 New Random Code
                         </button>
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-              <div className="flex items-center space-x-2 pt-2 border-t border-slate-800">
-                <input
-                  type="text"
-                  value={newPlayerName}
-                  onChange={(e) => setNewPlayerName(e.target.value)}
-                  placeholder="Add character (e.g. 'Tasha (Sorcerer)')"
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                />
-                <button
-                  onClick={() => {
-                    if (!newPlayerName.trim()) return;
-                    addPartyMember(newPlayerName.trim());
-                    setNewPlayerName('');
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700"
-                >
-                  + Join Party
-                </button>
-              </div>
-            </div>
+
+                  {/* Shareable Join Link & Scannable QR Code */}
+                  {typeof window !== 'undefined' && (() => {
+                    const joinUrl = `${window.location.origin}${window.location.pathname}?room=${sessionCode}`;
+                    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=6&data=${encodeURIComponent(joinUrl)}`;
+                    return (
+                      <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center gap-4">
+                        <div className="bg-white p-2 rounded-xl shrink-0 shadow-md">
+                          <img
+                            src={qrSrc}
+                            alt={`QR Code for Room ${sessionCode}`}
+                            className="w-28 h-28 object-contain"
+                          />
+                        </div>
+                        <div className="flex-1 w-full space-y-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">
+                            Step 2 • Share This Link or Scan QR Code
+                          </span>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            When players click this link on their phone or laptop, they land on the <strong>Player Join Lobby</strong>, type their character name, and connect to your live session:
+                          </p>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={joinUrl}
+                              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-sky-300 select-all"
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard?.writeText(joinUrl);
+                                setCopyLinkFeedback(true);
+                                setTimeout(() => setCopyLinkFeedback(false), 2500);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs transition shrink-0"
+                            >
+                              {copyLinkFeedback ? '✓ Copied!' : '🔗 Copy Join Link'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* DM Roll Resolution Mode Toggle: Trusted Mode vs DM Approval Mode */}
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
+                    Step 3 • Player Dice Roll Resolution Mode
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      onClick={() => setRollResolutionMode('trusted')}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        rollResolutionMode === 'trusted'
+                          ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 shadow'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="font-black block text-xs mb-0.5">⚡ Trusted Mode (Auto)</span>
+                      <span className="text-[10px] opacity-80 block leading-tight">
+                        Player rolls resolve immediately (DCs &amp; DM cues stay hidden).
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setRollResolutionMode('approval')}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        rollResolutionMode === 'approval'
+                          ? 'bg-amber-950/50 border-fantasy-gold text-amber-200 shadow'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="font-black block text-xs mb-0.5">🛡️ DM Approval Mode</span>
+                      <span className="text-[10px] opacity-80 block leading-tight">
+                        Player rolls go to DM Pending Queue for manual Pass/Fail approval.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Connected Party Roster & Live Player Locations */}
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Connected Party Roster &amp; Live Locations ({partyMembers.length})
+                    </span>
+                    {partyMembers.length > 1 && resetPartyRoster && (
+                      <button
+                        onClick={() => resetPartyRoster()}
+                        className="text-[10px] text-rose-400 hover:text-rose-300 font-bold underline"
+                        title="Clear joined players and reset Shopper to DM only"
+                      >
+                        Reset to DM Only
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {partyMembers.map((member) => (
+                      <div key={member} className="flex items-center justify-between bg-slate-950 px-3 py-2 rounded-lg border border-slate-800">
+                        <button
+                          onClick={() => setActivePlayer(member)}
+                          className={`font-bold text-left ${member === activePlayer ? 'text-fantasy-gold' : 'text-white hover:text-amber-200'}`}
+                        >
+                          {member} {member === activePlayer && '(Selected on DM Screen)'}
+                        </button>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[11px] text-sky-300 font-medium truncate max-w-[170px]">
+                            📍 {playerLocations?.[member] || `${selectedSettlement || 'Waterdeep'}`}
+                          </span>
+                          {partyMembers.length > 1 && member !== 'DM' && removePartyMember && (
+                            <button
+                              onClick={() => removePartyMember(member)}
+                              className="text-slate-500 hover:text-rose-400 transition"
+                              title={`Remove ${member} from roster`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center space-x-2 pt-2 border-t border-slate-800">
+                    <input
+                      type="text"
+                      value={newPlayerName}
+                      onChange={(e) => setNewPlayerName(e.target.value)}
+                      placeholder="Manually add character (e.g. 'Tasha (Sorcerer)')"
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!newPlayerName.trim()) return;
+                        addPartyMember(newPlayerName.trim());
+                        setNewPlayerName('');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Option to Join Another DM's Room as a Player */}
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Want to test or join a session as a player on this device?</span>
+                  <button
+                    onClick={() => {
+                      setRoomModalOpen(false);
+                      setPlayerJoinCodeInput(sessionCode);
+                      openPlayerJoinLobby(sessionCode);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold border border-slate-700 transition"
+                  >
+                    🎮 Open Player Join Screen
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

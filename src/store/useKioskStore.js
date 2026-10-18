@@ -294,6 +294,36 @@ function saveLocalJson(key, val) {
   } catch (e) {}
 }
 
+// Dynamically ensure PeerJS is available in browser (even if index.html wasn't updated)
+function ensurePeerJsLoaded() {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (window.Peer) return Promise.resolve(window.Peer);
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[data-peerjs="true"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(window.Peer || null));
+      existing.addEventListener('error', () => resolve(null));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+    script.async = true;
+    script.setAttribute('data-peerjs', 'true');
+    script.onload = () => resolve(window.Peer || null);
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+}
+
+function generateRandomRoomCode(len = 5) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < len; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 const initialCustomPacks = loadLocalJson('project_loot_custom_cities', {});
 const initialCityPacks = {
   Waterdeep: WATERDEEP_CITY_PACK,
@@ -302,7 +332,7 @@ const initialCityPacks = {
 };
 
 const initialHiddenNodes = loadLocalJson('project_loot_hidden_nodes', {});
-const initialSessionCode = loadLocalJson('project_loot_session_code', 'LOOT');
+const initialSessionCode = loadLocalJson('project_loot_session_code', generateRandomRoomCode(5));
 
 let roomChannel = null;
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -313,34 +343,82 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   }
 }
 
+// Module-scoped WebRTC references for Host & Client
+let activePeerInstance = null;
+let hostPeerConnections = new Map(); // peerId -> DataConnection
+let clientHostConnection = null;     // DataConnection from player -> DM host
+
 export const useLootStore = create((set, get) => {
+  // Build authoritative snapshot of room state for syncing
+  const getAuthoritativeRoomState = () => {
+    const s = get();
+    return {
+      cart: s.cart,
+      purchasedStock: s.purchasedStock,
+      unlockedVaults: s.unlockedVaults,
+      vaultLockedOut: s.vaultLockedOut,
+      disabledVenues: s.disabledVenues,
+      hiddenNodes: s.hiddenNodes,
+      bannedPlayersByVenue: s.bannedPlayersByVenue,
+      pendingChecks: s.pendingChecks,
+      rollResolutionMode: s.rollResolutionMode,
+      daySeed: s.daySeed,
+      activityLog: s.activityLog,
+      partyMembers: s.partyMembers,
+      playerLocations: s.playerLocations,
+      selectedSettlement: s.selectedSettlement
+    };
+  };
+
+  // Send packet across BroadcastChannel AND WebRTC DataChannels
   const broadcastRoomSync = (partialPayload) => {
     const state = get();
     const packet = {
       sessionCode: state.sessionCode,
       sender: state.activePlayer,
+      senderRole: state.sessionRole,
       timestamp: Date.now(),
       ...partialPayload
     };
-    saveLocalJson(`project_loot_room_${state.sessionCode}`, {
-      cart: state.cart,
-      purchasedStock: state.purchasedStock,
-      unlockedVaults: state.unlockedVaults,
-      vaultLockedOut: state.vaultLockedOut,
-      disabledVenues: state.disabledVenues,
-      hiddenNodes: state.hiddenNodes,
-      bannedPlayersByVenue: state.bannedPlayersByVenue,
-      pendingChecks: state.pendingChecks,
-      rollResolutionMode: state.rollResolutionMode,
-      daySeed: state.daySeed,
-      activityLog: state.activityLog,
-      playerLocations: state.playerLocations
-    });
+
+    // 1. Save to localStorage for same-browser fallback
+    saveLocalJson(`project_loot_room_${state.sessionCode}`, getAuthoritativeRoomState());
+
+    // 2. Broadcast via same-browser BroadcastChannel
     if (roomChannel) {
       try {
         roomChannel.postMessage(packet);
       } catch (e) {}
     }
+
+    // 3. Broadcast via WebRTC PeerJS across devices (phones, tablets, laptops)
+    if (state.sessionRole === 'host' && hostPeerConnections.size > 0) {
+      const fullPacket = {
+        ...packet,
+        type: 'SYNC_STATE',
+        state: getAuthoritativeRoomState()
+      };
+      hostPeerConnections.forEach((conn, peerId) => {
+        if (conn && conn.open) {
+          try {
+            conn.send(fullPacket);
+          } catch (e) {}
+        } else {
+          hostPeerConnections.delete(peerId);
+        }
+      });
+    } else if (state.sessionRole === 'player' && clientHostConnection && clientHostConnection.open) {
+      try {
+        clientHostConnection.send({
+          ...packet,
+          type: 'PLAYER_SYNC',
+          player: state.activePlayer,
+          state: partialPayload.state || {}
+        });
+      } catch (e) {}
+    }
+
+    // 4. Optional webhook relay
     if (state.syncRelayUrl && typeof fetch !== 'undefined') {
       fetch(state.syncRelayUrl, {
         method: 'POST',
@@ -350,17 +428,96 @@ export const useLootStore = create((set, get) => {
     }
   };
 
+  // Handle incoming messages from either BroadcastChannel or WebRTC DataChannel
+  const handleIncomingRoomPacket = (msg, sourceConn = null) => {
+    const state = get();
+    if (!msg || msg.sessionCode !== state.sessionCode) return;
+
+    // Player joining the DM's room
+    if (msg.type === 'PLAYER_JOIN' && state.sessionRole === 'host') {
+      const joiner = (msg.playerName || 'Adventurer').trim();
+      const joinLoc = msg.location || `${state.selectedSettlement || 'Waterdeep'} • City Directory`;
+      const nextMembers = state.partyMembers.includes(joiner)
+        ? state.partyMembers
+        : [...state.partyMembers, joiner];
+      const nextLocs = {
+        ...state.playerLocations,
+        [joiner]: joinLoc
+      };
+      const joinLog = {
+        id: `${Date.now()}-${Math.random()}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        player: joiner,
+        action: 'Joined Live Session',
+        details: `${joiner} connected to Room ${state.sessionCode}`,
+        type: 'info'
+      };
+      const nextLog = [joinLog, ...(state.activityLog || [])].slice(0, 100);
+      saveLocalJson('project_loot_party_members', nextMembers);
+      saveLocalJson('project_loot_player_locations', nextLocs);
+
+      set({
+        partyMembers: nextMembers,
+        playerLocations: nextLocs,
+        activityLog: nextLog,
+        connectedPeersCount: hostPeerConnections.size
+      });
+
+      // Immediately push authoritative room state to the new player and all peers
+      setTimeout(() => {
+        const snapshot = getAuthoritativeRoomState();
+        if (sourceConn && sourceConn.open) {
+          try {
+            sourceConn.send({
+              sessionCode: state.sessionCode,
+              type: 'SYNC_STATE',
+              state: snapshot
+            });
+          } catch (e) {}
+        }
+        broadcastRoomSync({ type: 'SYNC_STATE', state: snapshot });
+      }, 40);
+      return;
+    }
+
+    // Player sending a state/action update to DM Host
+    if ((msg.type === 'PLAYER_SYNC' || msg.type === 'SYNC_STATE') && state.sessionRole === 'host' && msg.senderRole === 'player') {
+      const incoming = msg.state || {};
+      set((prev) => {
+        const mergedLocs = incoming.playerLocations
+          ? { ...prev.playerLocations, ...incoming.playerLocations }
+          : prev.playerLocations;
+        const mergedMembers = incoming.partyMembers
+          ? Array.from(new Set([...prev.partyMembers, ...incoming.partyMembers]))
+          : prev.partyMembers;
+        return {
+          ...prev,
+          ...incoming,
+          partyMembers: mergedMembers,
+          playerLocations: mergedLocs
+        };
+      });
+      // Re-broadcast authoritative state to all other connected players
+      setTimeout(() => {
+        broadcastRoomSync({ type: 'SYNC_STATE', state: getAuthoritativeRoomState() });
+      }, 30);
+      return;
+    }
+
+    // Player receiving authoritative SYNC_STATE from DM Host
+    if (msg.type === 'SYNC_STATE' && msg.state) {
+      set((prev) => ({
+        ...prev,
+        ...msg.state,
+        // Preserve player's own locked identity on their device
+        activePlayer: prev.isPlayerLocked ? prev.activePlayer : (msg.state.activePlayer || prev.activePlayer)
+      }));
+    }
+  };
+
   if (roomChannel) {
     roomChannel.onmessage = (event) => {
-      const msg = event.data;
-      const state = get();
-      if (!msg || msg.sessionCode !== state.sessionCode) return;
-      if (msg.type === 'SYNC_STATE' && msg.state) {
-        set((prev) => ({
-          ...prev,
-          ...msg.state
-        }));
-      }
+      handleIncomingRoomPacket(event.data, null);
     };
   }
 
@@ -368,10 +525,10 @@ export const useLootStore = create((set, get) => {
     cityPacks: initialCityPacks,
     activeCityPackId: 'Waterdeep',
     data: buildCombinedCityData(initialCityPacks['Waterdeep']),
-    selectedPlanet: 'Toril',
-    selectedContinent: 'Faerûn',
-    selectedRegion: 'Sword Coast',
-    selectedSettlement: 'Waterdeep',
+    selectedPlanet: null,
+    selectedContinent: null,
+    selectedRegion: null,
+    selectedSettlement: null,
     selectedWard: null,
     venueType: null,
     selectedVenue: null,
@@ -387,7 +544,7 @@ export const useLootStore = create((set, get) => {
     partyMembers: loadLocalJson('project_loot_party_members', ['DM']),
     activePlayer: loadLocalJson('project_loot_active_player', 'DM'),
     playerLocations: loadLocalJson('project_loot_player_locations', {
-      'DM': 'Waterdeep • City Directory'
+      'DM': 'Cosmic Atlas • Multiverse'
     }),
     activityLog: [],
     rollResolutionMode: 'trusted',
@@ -399,7 +556,286 @@ export const useLootStore = create((set, get) => {
     pendingChecks: [],
     sessionCode: initialSessionCode,
     sessionRole: 'host',
+    isPlayerLocked: false,
+    playerHasJoinedLobby: true,
+    roomConnectionStatus: 'idle', // 'idle' | 'hosting' | 'connecting' | 'connected' | 'error'
+    roomStatusMessage: 'Local Mode — Click "Host Live Room" to let players join from their phones/laptops.',
+    connectedPeersCount: 0,
     syncRelayUrl: loadLocalJson('project_loot_relay_url', ''),
+
+    // Open the Kahoot/Jackbox Player Join Lobby Screen on this device
+    openPlayerJoinLobby: (prefillCode) => {
+      const code = (prefillCode || get().sessionCode || '').toUpperCase().trim();
+      set({
+        sessionCode: code,
+        sessionRole: 'player',
+        isPlayerLocked: true,
+        playerHasJoinedLobby: false,
+        roomConnectionStatus: 'idle',
+        roomStatusMessage: 'Enter the DM Room Code and your Character Name to join.'
+      });
+    },
+
+    // Leave Player Mode and return to standalone DM/Host device mode
+    leaveLiveRoom: () => {
+      if (clientHostConnection) {
+        try { clientHostConnection.close(); } catch (e) {}
+        clientHostConnection = null;
+      }
+      if (activePeerInstance) {
+        try { activePeerInstance.destroy(); } catch (e) {}
+        activePeerInstance = null;
+      }
+      hostPeerConnections.clear();
+      set({
+        sessionRole: 'host',
+        isPlayerLocked: false,
+        playerHasJoinedLobby: true,
+        activePlayer: 'DM',
+        roomConnectionStatus: 'idle',
+        roomStatusMessage: 'Disconnected from live room.',
+        connectedPeersCount: 0
+      });
+    },
+
+    // DM ACTION: Create & Host a Live Cross-Device Room via WebRTC (PeerJS) + BroadcastChannel
+    hostLiveRoom: async (customCode) => {
+      const rawCode = customCode ? String(customCode).toUpperCase().replace(/[^A-Z0-9]/g, '') : generateRandomRoomCode(5);
+      const code = rawCode.length >= 3 ? rawCode.slice(0, 8) : generateRandomRoomCode(5);
+      saveLocalJson('project_loot_session_code', code);
+
+      // Clean up any existing peer instance
+      if (clientHostConnection) {
+        try { clientHostConnection.close(); } catch (e) {}
+        clientHostConnection = null;
+      }
+      if (activePeerInstance) {
+        try { activePeerInstance.destroy(); } catch (e) {}
+        activePeerInstance = null;
+      }
+      hostPeerConnections.clear();
+
+      set({
+        sessionCode: code,
+        sessionRole: 'host',
+        isPlayerLocked: false,
+        playerHasJoinedLobby: true,
+        roomConnectionStatus: 'connecting',
+        roomStatusMessage: `Starting live room ${code}...`,
+        connectedPeersCount: 0
+      });
+
+      const PeerClass = await ensurePeerJsLoaded();
+      if (!PeerClass) {
+        set({
+          roomConnectionStatus: 'hosting',
+          roomStatusMessage: `Room ${code} active on local network (Same-Browser Tab Sync ready).`
+        });
+        return code;
+      }
+
+      const peerId = `project-loot-room-${code}`;
+      try {
+        const peer = new PeerClass(peerId, { debug: 0 });
+        activePeerInstance = peer;
+
+        peer.on('open', () => {
+          set({
+            sessionCode: code,
+            sessionRole: 'host',
+            roomConnectionStatus: 'hosting',
+            roomStatusMessage: `Live Room ${code} is OPEN! Share the Join Link or QR code with your players.`,
+            connectedPeersCount: hostPeerConnections.size
+          });
+          broadcastRoomSync({ type: 'SYNC_STATE', state: getAuthoritativeRoomState() });
+        });
+
+        peer.on('connection', (conn) => {
+          hostPeerConnections.set(conn.peer, conn);
+          set({ connectedPeersCount: hostPeerConnections.size });
+
+          conn.on('open', () => {
+            set({ connectedPeersCount: hostPeerConnections.size });
+            // Send current authoritative state immediately on link open
+            try {
+              conn.send({
+                sessionCode: get().sessionCode,
+                type: 'SYNC_STATE',
+                state: getAuthoritativeRoomState()
+              });
+            } catch (e) {}
+          });
+
+          conn.on('data', (data) => {
+            handleIncomingRoomPacket(data, conn);
+          });
+
+          conn.on('close', () => {
+            hostPeerConnections.delete(conn.peer);
+            set({ connectedPeersCount: hostPeerConnections.size });
+          });
+
+          conn.on('error', () => {
+            hostPeerConnections.delete(conn.peer);
+            set({ connectedPeersCount: hostPeerConnections.size });
+          });
+        });
+
+        peer.on('error', (err) => {
+          if (err && err.type === 'unavailable-id') {
+            // Room code already taken on signaling server; generate a fresh one
+            const fallbackCode = generateRandomRoomCode(5);
+            get().hostLiveRoom(fallbackCode);
+          } else {
+            set({
+              roomConnectionStatus: 'hosting',
+              roomStatusMessage: `Room ${code} active (Local/Tab sync active; WebRTC note: ${err?.type || 'ready'}).`
+            });
+          }
+        });
+      } catch (e) {
+        set({
+          roomConnectionStatus: 'hosting',
+          roomStatusMessage: `Room ${code} active.`
+        });
+      }
+
+      return code;
+    },
+
+    // PLAYER ACTION: Join a DM's Live Room by Room Code + Character Name
+    joinLiveRoom: async (inputCode, inputCharacterName) => {
+      const code = String(inputCode || get().sessionCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+      const charName = String(inputCharacterName || '').trim();
+      if (!code || !charName) return false;
+
+      saveLocalJson('project_loot_session_code', code);
+      saveLocalJson('project_loot_active_player', charName);
+
+      // Clean up old peer connections
+      if (clientHostConnection) {
+        try { clientHostConnection.close(); } catch (e) {}
+        clientHostConnection = null;
+      }
+      if (activePeerInstance) {
+        try { activePeerInstance.destroy(); } catch (e) {}
+        activePeerInstance = null;
+      }
+
+      const initialLocation = get().selectedSettlement ? `${get().selectedSettlement} • City Directory` : 'Cosmic Atlas • Multiverse';
+
+      // Check if same-browser snapshot exists first
+      const localSnapshot = loadLocalJson(`project_loot_room_${code}`, null);
+
+      set((state) => {
+        const nextMembers = state.partyMembers.includes(charName)
+          ? state.partyMembers
+          : [...state.partyMembers.filter(p => p !== 'DM'), charName];
+        const nextLocs = {
+          ...(localSnapshot?.playerLocations || state.playerLocations),
+          [charName]: initialLocation
+        };
+        return {
+          ...(localSnapshot || {}),
+          sessionCode: code,
+          sessionRole: 'player',
+          activePlayer: charName,
+          partyMembers: nextMembers,
+          playerLocations: nextLocs,
+          isPlayerLocked: true,
+          playerHasJoinedLobby: true,
+          roomConnectionStatus: 'connecting',
+          roomStatusMessage: `Connecting to DM Room ${code} as ${charName}...`
+        };
+      });
+
+      // 1. Announce join over same-browser BroadcastChannel immediately
+      if (roomChannel) {
+        try {
+          roomChannel.postMessage({
+            sessionCode: code,
+            type: 'PLAYER_JOIN',
+            playerName: charName,
+            location: initialLocation,
+            sender: charName,
+            senderRole: 'player',
+            timestamp: Date.now()
+          });
+        } catch (e) {}
+      }
+
+      // 2. Connect across devices via PeerJS WebRTC
+      const PeerClass = await ensurePeerJsLoaded();
+      if (!PeerClass) {
+        set({
+          roomConnectionStatus: 'connected',
+          roomStatusMessage: `Joined Room ${code} as ${charName}`
+        });
+        return true;
+      }
+
+      try {
+        const clientPeer = new PeerClass(undefined, { debug: 0 });
+        activePeerInstance = clientPeer;
+
+        clientPeer.on('open', () => {
+          const targetHostId = `project-loot-room-${code}`;
+          const conn = clientPeer.connect(targetHostId, { reliable: true });
+          clientHostConnection = conn;
+
+          conn.on('open', () => {
+            set({
+              roomConnectionStatus: 'connected',
+              roomStatusMessage: `Connected live to DM Room ${code} as ${charName}`
+            });
+            try {
+              conn.send({
+                sessionCode: code,
+                type: 'PLAYER_JOIN',
+                playerName: charName,
+                location: get().selectedSettlement ? `${get().selectedSettlement} • City Directory` : 'Cosmic Atlas • Multiverse',
+                sender: charName,
+                senderRole: 'player',
+                timestamp: Date.now()
+              });
+            } catch (e) {}
+          });
+
+          conn.on('data', (data) => {
+            handleIncomingRoomPacket(data, conn);
+          });
+
+          conn.on('close', () => {
+            set({
+              roomConnectionStatus: 'error',
+              roomStatusMessage: `DM closed Room ${code} or connection dropped.`
+            });
+          });
+
+          conn.on('error', () => {
+            set({
+              roomConnectionStatus: 'connected',
+              roomStatusMessage: `Joined Room ${code} as ${charName}`
+            });
+          });
+        });
+
+        clientPeer.on('error', () => {
+          // Even if WebRTC peer couldn't reach remote host (e.g. same-browser local testing without hostLiveRoom clicked yet), keep player in room
+          set({
+            roomConnectionStatus: 'connected',
+            roomStatusMessage: `In Room ${code} as ${charName}`
+          });
+        });
+      } catch (e) {
+        set({
+          roomConnectionStatus: 'connected',
+          roomStatusMessage: `In Room ${code} as ${charName}`
+        });
+      }
+
+      return true;
+    },
 
     setRollResolutionMode: (mode) => {
       set({ rollResolutionMode: mode });
@@ -425,23 +861,9 @@ export const useLootStore = create((set, get) => {
     }),
 
     pushRoomStateNow: () => {
-      const s = get();
       broadcastRoomSync({
         type: 'SYNC_STATE',
-        state: {
-          cart: s.cart,
-          purchasedStock: s.purchasedStock,
-          unlockedVaults: s.unlockedVaults,
-          vaultLockedOut: s.vaultLockedOut,
-          disabledVenues: s.disabledVenues,
-          hiddenNodes: s.hiddenNodes,
-          bannedPlayersByVenue: s.bannedPlayersByVenue,
-          pendingChecks: s.pendingChecks,
-          rollResolutionMode: s.rollResolutionMode,
-          daySeed: s.daySeed,
-          activityLog: s.activityLog,
-          playerLocations: s.playerLocations
-        }
+        state: getAuthoritativeRoomState()
       });
     },
 
@@ -603,16 +1025,18 @@ export const useLootStore = create((set, get) => {
       saveLocalJson('project_loot_party_members', nextMembers);
       saveLocalJson('project_loot_active_player', nextActive);
       saveLocalJson('project_loot_player_locations', nextLocs);
+      setTimeout(() => broadcastRoomSync({ type: 'SYNC_STATE', state: { partyMembers: nextMembers, playerLocations: nextLocs } }), 0);
       return { partyMembers: nextMembers, activePlayer: nextActive, playerLocations: nextLocs };
     }),
 
     resetPartyRoster: () => {
       const baseMembers = ['DM'];
-      const baseLocs = { 'DM': 'Waterdeep • City Directory' };
+      const baseLocs = { 'DM': 'Cosmic Atlas • Multiverse' };
       saveLocalJson('project_loot_party_members', baseMembers);
       saveLocalJson('project_loot_active_player', 'DM');
       saveLocalJson('project_loot_player_locations', baseLocs);
       set({ partyMembers: baseMembers, activePlayer: 'DM', playerLocations: baseLocs });
+      setTimeout(() => broadcastRoomSync({ type: 'SYNC_STATE', state: { partyMembers: baseMembers, playerLocations: baseLocs } }), 0);
     },
 
     addActivityLog: (entry) => set((state) => {
@@ -669,6 +1093,7 @@ export const useLootStore = create((set, get) => {
         ...state.playerLocations,
         [state.activePlayer]: `${settlement} • City Directory`
       };
+      setTimeout(() => broadcastRoomSync({ type: 'SYNC_STATE', state: { playerLocations: nextLocs } }), 0);
       return {
         selectedSettlement: settlement,
         activeCityPackId: nextPackId,
@@ -684,6 +1109,7 @@ export const useLootStore = create((set, get) => {
         ...state.playerLocations,
         [state.activePlayer]: ward ? `${state.selectedSettlement || 'City'} • ${ward} District` : `${state.selectedSettlement || 'City'} • Directory`
       };
+      setTimeout(() => broadcastRoomSync({ type: 'SYNC_STATE', state: { playerLocations: nextLocs } }), 0);
       return { selectedWard: ward, selectedVenue: null, venueType: 'shops', playerLocations: nextLocs };
     }),
     setVenueType: (type) => set({ venueType: type, selectedVenue: null }),
@@ -699,6 +1125,7 @@ export const useLootStore = create((set, get) => {
           ...state.playerLocations,
           [state.activePlayer]: `${vName} (${state.selectedWard || 'City'})`
         };
+        setTimeout(() => broadcastRoomSync({ type: 'SYNC_STATE', state: { playerLocations: nextLocs } }), 0);
         return { selectedVenue: venue, venueType: isEatery ? 'eateries' : 'shops', playerLocations: nextLocs };
       });
     },
